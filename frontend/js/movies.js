@@ -32,7 +32,6 @@ function buildTrailerPlayer(trailerUrl, title, autoPlay = false) {
   const uniqueId = `trailer-${videoId}-${Math.random().toString(36).slice(2,7)}`;
 
   if (autoPlay) {
-    // If autoplay requested, go straight to iframe
     return buildTrailerIframe(videoId, true);
   }
 
@@ -54,7 +53,6 @@ function buildTrailerPlayer(trailerUrl, title, autoPlay = false) {
 }
 
 function buildTrailerIframe(videoId, autoPlay = false) {
-  // youtube-nocookie avoids consent/cookie blocks; origin param helps with localhost
   const origin = encodeURIComponent(location.origin || 'http://localhost:3000');
   const src = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1${autoPlay ? '&autoplay=1' : ''}&origin=${origin}`;
   return `
@@ -75,6 +73,47 @@ function loadTrailerEmbed(containerId, videoId) {
   container.style.cursor = 'default';
   container.style.aspectRatio = '16/9';
   container.innerHTML = buildTrailerIframe(videoId, true);
+}
+
+// Drag to scroll for movie rows (mouse + touch)
+function enableDragScroll(container) {
+  let isDown = false;
+  let startX;
+  let scrollLeft;
+  let hasDragged = false;
+
+  container.addEventListener('mousedown', (e) => {
+    isDown = true;
+    hasDragged = false;
+    container.style.cursor = 'grabbing';
+    startX = e.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+  });
+  container.addEventListener('mouseleave', () => { isDown = false; container.style.cursor = 'grab'; });
+  container.addEventListener('mouseup', () => { isDown = false; container.style.cursor = 'grab'; });
+  container.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    hasDragged = true;
+    const x = e.pageX - container.offsetLeft;
+    container.scrollLeft = scrollLeft - (x - startX) * 2;
+  });
+  container.addEventListener('click', (e) => {
+    if (hasDragged) { e.stopPropagation(); e.preventDefault(); hasDragged = false; }
+  }, true);
+
+  // Touch swipe support
+  let touchStartX = 0;
+  let touchScrollLeft = 0;
+  container.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].pageX;
+    touchScrollLeft = container.scrollLeft;
+  }, { passive: true });
+  container.addEventListener('touchmove', (e) => {
+    container.scrollLeft = touchScrollLeft + (touchStartX - e.touches[0].pageX);
+  }, { passive: true });
+
+  container.style.cursor = 'grab';
 }
 
 const GENRES = [
@@ -101,12 +140,10 @@ async function loadMovies() {
 function renderHomePage() {
   if (!allMovies.length) return;
 
-  // Pick a random hero movie (from high-rated)
   const heroMovies = allMovies.filter(m => m.rating >= 7.5);
   const heroMovie = heroMovies[Math.floor(Math.random() * heroMovies.length)];
   setHeroMovie(heroMovie);
 
-  // Render genre rows
   const container = document.getElementById('movie-rows');
   container.innerHTML = '';
 
@@ -126,6 +163,11 @@ function renderHomePage() {
       container.innerHTML += renderMovieRow(genre.emoji + ' ' + genre.name, movies);
     }
   });
+
+  // Enable drag scroll on all movie rows
+  setTimeout(() => {
+    container.querySelectorAll('.movie-row-scroll').forEach(enableDragScroll);
+  }, 200);
 
   // Animate rows
   const rows = container.querySelectorAll('.movie-row');
@@ -272,12 +314,17 @@ async function openMovieDetail(movieId, autoPlay = false) {
         <!-- More movies row -->
         <div class="mt-10">
           <h2 class="text-lg font-bold mb-4">More Tamil Films</h2>
-          <div class="movie-row-scroll">
+          <div class="movie-row-scroll" id="more-movies-row">
             ${allMovies.filter(m => m.id !== movie.id).slice(0, 8).map(m => renderMovieCard(m)).join('')}
           </div>
         </div>
       </div>
     `;
+
+    setTimeout(() => {
+      const moreRow = document.getElementById('more-movies-row');
+      if (moreRow) enableDragScroll(moreRow);
+    }, 200);
 
     if (autoPlay) {
       setTimeout(() => document.getElementById('movie-trailer-section')?.scrollIntoView({ behavior: 'smooth' }), 300);
@@ -323,7 +370,10 @@ function filterByGenre(genre) {
   if (!filtered.length) return;
   rows.innerHTML = renderMovieRow(`${genre} Films`, filtered);
 
-  // Add back button
+  setTimeout(() => {
+    rows.querySelectorAll('.movie-row-scroll').forEach(enableDragScroll);
+  }, 200);
+
   rows.insertAdjacentHTML('afterbegin', `
     <button onclick="renderHomePage()" class="mb-6 text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-2">
       ← All Categories
