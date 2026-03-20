@@ -41,6 +41,11 @@ app.use('/api/rooms', roomsRouter);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: '🎬 TamilFlix API is running!' });
 });
+// View users
+app.get('/api/users', (req, res) => {
+  const users = db.prepare('SELECT id, name, email, is_verified, created_at FROM users').all();
+  res.json(users);
+});
 
 // Serve frontend for all non-API routes
 app.get('*', (req, res) => {
