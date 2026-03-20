@@ -13,7 +13,6 @@
 
   <!-- AUTH OVERLAY -->
   <div id="auth-screen" class="fixed inset-0 z-50 flex items-center justify-center">
-    <!-- Hero Background -->
     <div class="auth-bg absolute inset-0"></div>
     <div class="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/90"></div>
     
@@ -189,19 +188,23 @@
       </div>
 
       <!-- Movie Rows -->
-      <div class="px-4 md:px-8 pb-16 -mt-8 relative z-10" id="movie-rows">
-        <!-- Rows will be injected here -->
-      </div>
+      <div class="px-4 md:px-8 pb-16 -mt-8 relative z-10" id="movie-rows"></div>
     </div>
 
     <!-- MOVIE DETAIL PAGE -->
-    <div id="page-movie" class="hidden pt-16 pb-16">
-      <!-- Movie detail content injected dynamically -->
-    </div>
+    <div id="page-movie" class="hidden pt-16 pb-16"></div>
 
     <!-- QUIZ PAGE -->
     <div id="page-quiz" class="hidden pt-20 pb-16 px-4 min-h-screen">
       <div class="max-w-2xl mx-auto">
+
+        <!-- Home button -->
+        <div class="mb-6">
+          <button onclick="showPage('home')" class="text-gray-400 hover:text-white text-sm flex items-center gap-2 transition-colors">
+            ← Back to Home
+          </button>
+        </div>
+
         <div class="text-center mb-8">
           <div class="text-5xl mb-4">🎯</div>
           <h1 class="text-3xl font-extrabold mb-2">Tamil Movie Quiz</h1>
@@ -228,6 +231,7 @@
             <div></div>
           </div>
         </div>
+
       </div>
     </div>
 
