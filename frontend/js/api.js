@@ -1,7 +1,7 @@
 // API Helper - Centralized fetch wrapper
 // Falls back to static data (STATIC_MOVIES) when backend is unavailable
 const API = {
-  BASE: 'github.com/devaki3/tamilflix1-main/blob/main/frontend/js/api.js',
+  BASE: 'https://web-production-95ee.up.railway.app/api',
   staticMode: false, // auto-detected on first request failure
 
   getToken() {
