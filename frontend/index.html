@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TamilFlix – Discover Tamil Cinema</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-black text-white min-h-screen">
+
+  <!-- AUTH OVERLAY -->
+  <div id="auth-screen" class="fixed inset-0 z-50 flex items-center justify-center">
+    <!-- Hero Background -->
+    <div class="auth-bg absolute inset-0"></div>
+    <div class="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/90"></div>
+    
+    <div class="relative z-10 w-full max-w-md mx-4">
+      <!-- Logo -->
+      <div class="text-center mb-8">
+        <div class="logo-text text-6xl font-bold text-red-600 mb-2">TAMILFLIX</div>
+        <div class="text-gray-400 text-sm tracking-[0.3em] uppercase font-light">Discover Tamil Cinema</div>
+        <div class="w-16 h-0.5 bg-red-600 mx-auto mt-3"></div>
+      </div>
+
+      <!-- Auth Card -->
+      <div class="auth-card rounded-2xl p-8 backdrop-blur-xl">
+        
+        <!-- Tabs -->
+        <div class="flex mb-6 bg-white/5 rounded-xl p-1">
+          <button id="tab-login" onclick="switchTab('login')" class="tab-btn flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all active">Login</button>
+          <button id="tab-signup" onclick="switchTab('signup')" class="tab-btn flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all">Sign Up</button>
+        </div>
+
+        <!-- LOGIN FORM -->
+        <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Gmail</label>
+            <input type="email" id="login-email" placeholder="your@gmail.com" required
+              class="auth-input w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors">
+          </div>
+          <div class="relative">
+            <label class="block text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Password</label>
+            <input type="password" id="login-password" placeholder="••••••••" required
+              class="auth-input w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors">
+            <button type="button" onclick="togglePassword('login-password')" class="absolute right-3 top-9 text-gray-500 hover:text-white text-xs">SHOW</button>
+          </div>
+          <div id="login-error" class="hidden text-red-400 text-xs bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2"></div>
+          <button type="submit" id="login-btn"
+            class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-red-600/30 active:scale-95">
+            <span id="login-btn-text">ENTER TAMILFLIX</span>
+          </button>
+          <p class="text-center text-xs text-gray-500">
+            New here? <button type="button" onclick="switchTab('signup')" class="text-red-500 hover:text-red-400">Create account →</button>
+          </p>
+        </form>
+
+        <!-- SIGNUP FORM -->
+        <form id="signup-form" onsubmit="handleSignup(event)" class="space-y-4 hidden">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Full Name</label>
+            <input type="text" id="signup-name" placeholder="Your name" required
+              class="auth-input w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Gmail</label>
+            <input type="email" id="signup-email" placeholder="your@gmail.com" required
+              class="auth-input w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors">
+          </div>
+          <div class="relative">
+            <label class="block text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Password</label>
+            <input type="password" id="signup-password" placeholder="Min 6 characters" required
+              class="auth-input w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors">
+            <button type="button" onclick="togglePassword('signup-password')" class="absolute right-3 top-9 text-gray-500 hover:text-white text-xs">SHOW</button>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Confirm Password</label>
+            <input type="password" id="signup-confirm" placeholder="Repeat password" required
+              class="auth-input w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors">
+          </div>
+          <div id="signup-error" class="hidden text-red-400 text-xs bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2"></div>
+          <button type="submit" id="signup-btn"
+            class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-red-600/30 active:scale-95">
+            <span id="signup-btn-text">CREATE ACCOUNT</span>
+          </button>
+          <p class="text-center text-xs text-gray-500">
+            Already have account? <button type="button" onclick="switchTab('login')" class="text-red-500 hover:text-red-400">Login →</button>
+          </p>
+        </form>
+
+        <!-- OTP FORM -->
+        <div id="otp-form" class="hidden">
+          <div class="text-center mb-6">
+            <div class="text-4xl mb-3">📧</div>
+            <h3 class="text-lg font-bold mb-1">Check Your Email</h3>
+            <p class="text-gray-400 text-sm">We sent a 6-digit code to <span id="otp-email-display" class="text-white font-medium"></span></p>
+          </div>
+          <div class="flex gap-2 justify-center mb-4">
+            <input id="otp-input" type="text" maxlength="6" placeholder="000000"
+              class="w-40 text-center text-2xl tracking-[0.5em] bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500 transition-colors">
+          </div>
+          <div id="otp-error" class="hidden text-red-400 text-xs text-center mb-3"></div>
+          <button onclick="handleOTPVerify()" id="otp-btn"
+            class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-all duration-200 active:scale-95 mb-3">
+            VERIFY OTP
+          </button>
+          <button onclick="resendOTP()" class="w-full text-gray-400 hover:text-white text-sm py-2 transition-colors">
+            Didn't receive? <span class="text-red-500">Resend OTP</span>
+          </button>
+          <div id="dev-otp-hint" class="hidden mt-3 text-center text-xs text-yellow-500/80 bg-yellow-900/20 rounded-lg px-3 py-2"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app" class="hidden">
+
+    <!-- NAVBAR -->
+    <nav class="fixed top-0 left-0 right-0 z-40 nav-gradient px-4 md:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <div class="logo-text text-3xl font-bold text-red-600 cursor-pointer" onclick="showPage('home')">TAMILFLIX</div>
+        <div class="hidden md:flex items-center gap-6 text-sm text-gray-300">
+          <button onclick="showPage('home')" class="nav-link hover:text-white transition-colors">Home</button>
+          <button onclick="filterByGenre('Action')" class="nav-link hover:text-white transition-colors">Action</button>
+          <button onclick="filterByGenre('Romance')" class="nav-link hover:text-white transition-colors">Romance</button>
+          <button onclick="filterByGenre('Comedy')" class="nav-link hover:text-white transition-colors">Comedy</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Search -->
+        <div class="relative hidden md:block">
+          <input type="text" id="search-input" placeholder="Search Tamil movies..." oninput="handleSearch(this.value)"
+            class="bg-black/60 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 w-52 transition-all focus:w-72">
+          <span class="absolute left-3 top-2.5 text-gray-500 text-xs">🔍</span>
+        </div>
+        <!-- Quiz Button -->
+        <button onclick="showPage('quiz')"
+          class="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all hover:shadow-lg hover:shadow-red-600/30 flex items-center gap-2">
+          <span>🎯</span> <span class="hidden sm:inline">QUIZ</span>
+        </button>
+        <!-- Profile -->
+        <div class="relative">
+          <button onclick="toggleProfileMenu()" class="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-red-800 flex items-center justify-center text-xs font-bold" id="profile-avatar"></button>
+          <div id="profile-menu" class="hidden absolute right-0 top-10 bg-zinc-900 border border-white/10 rounded-xl p-2 w-44 shadow-xl">
+            <div class="px-3 py-2 border-b border-white/10 mb-2">
+              <p class="text-xs font-semibold" id="profile-name-menu"></p>
+              <p class="text-xs text-gray-500 truncate" id="profile-email-menu"></p>
+            </div>
+            <button onclick="showPage('home'); toggleProfileMenu()" class="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors">🏠 Home</button>
+            <button onclick="handleLogout()" class="w-full text-left px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors">🚪 Logout</button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- SEARCH RESULTS OVERLAY -->
+    <div id="search-results" class="hidden fixed top-16 left-0 right-0 z-30 bg-black/95 backdrop-blur-md border-b border-white/10 px-8 py-4 max-h-96 overflow-y-auto">
+      <div id="search-results-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+    </div>
+
+    <!-- HOME PAGE -->
+    <div id="page-home" class="pt-16">
+      <!-- Hero Section -->
+      <div id="hero-section" class="relative h-[70vh] min-h-[500px] overflow-hidden">
+        <div id="hero-bg" class="absolute inset-0 bg-cover bg-center transition-all duration-700"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
+        <div class="relative h-full flex items-center px-8 md:px-16 pb-16">
+          <div class="max-w-lg">
+            <div id="hero-badge" class="inline-block bg-red-600 text-xs font-bold px-3 py-1 rounded-full mb-4 tracking-wider"></div>
+            <h1 id="hero-title" class="text-4xl md:text-6xl font-extrabold mb-3 leading-tight hero-title-font"></h1>
+            <p id="hero-desc" class="text-gray-300 text-sm md:text-base mb-6 line-clamp-3 max-w-sm"></p>
+            <div class="flex gap-3">
+              <button id="hero-watch-btn" onclick="watchHeroTrailer()"
+                class="bg-white text-black font-bold px-6 py-2.5 rounded-lg hover:bg-gray-200 transition-all flex items-center gap-2 text-sm">
+                ▶ Watch Trailer
+              </button>
+              <button id="hero-together-btn" onclick="watchHeroTogether()"
+                class="bg-white/20 backdrop-blur text-white font-bold px-6 py-2.5 rounded-lg hover:bg-white/30 transition-all flex items-center gap-2 text-sm border border-white/20">
+                👥 Watch Together
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Movie Rows -->
+      <div class="px-4 md:px-8 pb-16 -mt-8 relative z-10" id="movie-rows">
+        <!-- Rows will be injected here -->
+      </div>
+    </div>
+
+    <!-- MOVIE DETAIL PAGE -->
+    <div id="page-movie" class="hidden pt-16 pb-16">
+      <!-- Movie detail content injected dynamically -->
+    </div>
+
+    <!-- QUIZ PAGE -->
+    <div id="page-quiz" class="hidden pt-20 pb-16 px-4 min-h-screen">
+      <div class="max-w-2xl mx-auto">
+        <div class="text-center mb-8">
+          <div class="text-5xl mb-4">🎯</div>
+          <h1 class="text-3xl font-extrabold mb-2">Tamil Movie Quiz</h1>
+          <p class="text-gray-400">Answer 8 questions to get your perfect Tamil movie recommendation</p>
+        </div>
+        
+        <!-- Quiz Progress -->
+        <div class="quiz-progress-bar mb-8 bg-white/10 rounded-full h-1.5">
+          <div id="quiz-progress-fill" class="h-full bg-red-600 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between text-xs text-gray-500 mb-6">
+          <span id="quiz-step-label">Question 1 of 8</span>
+          <span id="quiz-pct-label">0% Complete</span>
+        </div>
+
+        <!-- Quiz Question Card -->
+        <div id="quiz-card" class="quiz-card rounded-2xl p-8">
+          <div id="quiz-question" class="text-xl font-bold mb-6"></div>
+          <div id="quiz-options" class="space-y-3"></div>
+          <div class="mt-6 flex justify-between items-center">
+            <button id="quiz-prev-btn" onclick="quizPrev()" class="hidden text-gray-400 hover:text-white text-sm flex items-center gap-2 transition-colors">
+              ← Previous
+            </button>
+            <div></div>
+            <button id="quiz-next-btn" onclick="quizNext()" disabled
+              class="bg-red-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-red-500 text-white text-sm font-bold px-6 py-2.5 rounded-xl transition-all">
+              Next Question →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECOMMENDATION PAGE -->
+    <div id="page-recommendation" class="hidden pt-20 pb-16 px-4 min-h-screen">
+      <div class="max-w-3xl mx-auto">
+        <div class="text-center mb-8">
+          <div class="text-5xl mb-3">🎬</div>
+          <h1 class="text-2xl font-extrabold">Your Perfect Tamil Movie</h1>
+          <p class="text-gray-400 text-sm mt-1">Based on your quiz answers, we picked this just for you</p>
+        </div>
+        <div id="recommendation-content"></div>
+      </div>
+    </div>
+
+    <!-- WATCH TOGETHER PAGE -->
+    <div id="page-watch-together" class="hidden pt-20 pb-16 px-4 min-h-screen">
+      <div class="max-w-4xl mx-auto" id="watch-together-content"></div>
+    </div>
+
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden">
+    <div class="bg-zinc-800 border border-white/10 text-white text-sm px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+      <span id="toast-icon">✅</span>
+      <span id="toast-msg"></span>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/static-data.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/movies.js"></script>
+  <script src="js/quiz.js"></script>
+  <script src="js/watch-together.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
