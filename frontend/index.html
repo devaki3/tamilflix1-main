@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TamilFlix – Discover Tamil Cinema</title>
+  <title>PadamPaapoma – Discover Tamil Cinema</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -20,7 +20,7 @@
     <div class="relative z-10 w-full max-w-md mx-4">
       <!-- Logo -->
       <div class="text-center mb-8">
-        <div class="logo-text text-6xl font-bold text-red-600 mb-2">TAMILFLIX</div>
+        <div class="logo-text text-6xl font-bold text-red-600 mb-2">PADAMPAAPOMA</div>
         <div class="text-gray-400 text-sm tracking-[0.3em] uppercase font-light">Discover Tamil Cinema</div>
         <div class="w-16 h-0.5 bg-red-600 mx-auto mt-3"></div>
       </div>
@@ -50,7 +50,7 @@
           <div id="login-error" class="hidden text-red-400 text-xs bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2"></div>
           <button type="submit" id="login-btn"
             class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-red-600/30 active:scale-95">
-            <span id="login-btn-text">ENTER TAMILFLIX</span>
+            <span id="login-btn-text">ENTER PADAMPAAPOMA</span>
           </button>
           <p class="text-center text-xs text-gray-500">
             New here? <button type="button" onclick="switchTab('signup')" class="text-red-500 hover:text-red-400">Create account →</button>
@@ -122,7 +122,7 @@
     <!-- NAVBAR -->
     <nav class="fixed top-0 left-0 right-0 z-40 nav-gradient px-4 md:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center gap-8">
-        <div class="logo-text text-3xl font-bold text-red-600 cursor-pointer" onclick="showPage('home')">TAMILFLIX</div>
+        <div class="logo-text text-3xl font-bold text-red-600 cursor-pointer" onclick="showPage('home')">PADAMPAAPOMA</div>
         <div class="hidden md:flex items-center gap-6 text-sm text-gray-300">
           <button onclick="showPage('home')" class="nav-link hover:text-white transition-colors">Home</button>
           <button onclick="filterByGenre('Action')" class="nav-link hover:text-white transition-colors">Action</button>
@@ -226,10 +226,6 @@
               ← Previous
             </button>
             <div></div>
-            <button id="quiz-next-btn" onclick="quizNext()" disabled
-              class="bg-red-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-red-500 text-white text-sm font-bold px-6 py-2.5 rounded-xl transition-all">
-              Next Question →
-            </button>
           </div>
         </div>
       </div>
