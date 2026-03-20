@@ -98,15 +98,12 @@ function renderQuizStep() {
   const total = QUIZ_QUESTIONS.length;
   const pct = Math.round((currentQuizStep / total) * 100);
 
-  // Update progress
   document.getElementById('quiz-progress-fill').style.width = `${pct}%`;
   document.getElementById('quiz-step-label').textContent = `Question ${currentQuizStep + 1} of ${total}`;
   document.getElementById('quiz-pct-label').textContent = `${pct}% Complete`;
 
-  // Update question
   document.getElementById('quiz-question').textContent = q.question;
 
-  // Render options
   const optionsEl = document.getElementById('quiz-options');
   optionsEl.innerHTML = q.options.map(opt => `
     <div class="quiz-option ${quizAnswers[q.key] === opt.value ? 'selected' : ''}"
@@ -119,7 +116,6 @@ function renderQuizStep() {
     </div>
   `).join('');
 
-  // Prev button
   const prevBtn = document.getElementById('quiz-prev-btn');
   if (currentQuizStep > 0) {
     prevBtn.classList.remove('hidden');
@@ -127,7 +123,6 @@ function renderQuizStep() {
     prevBtn.classList.add('hidden');
   }
 
-  // Next button
   const nextBtn = document.getElementById('quiz-next-btn');
   const hasAnswer = quizAnswers[q.key] !== undefined;
   nextBtn.disabled = !hasAnswer;
@@ -142,18 +137,14 @@ function renderQuizStep() {
 function selectQuizOption(key, value, el) {
   quizAnswers[key] = value;
 
-  // Update visual
   document.querySelectorAll('.quiz-option').forEach(opt => opt.classList.remove('selected'));
   el.classList.add('selected');
 
-  // Enable next button
   const nextBtn = document.getElementById('quiz-next-btn');
   nextBtn.disabled = false;
 
-  // Auto-advance after short delay on mobile
-  if (window.innerWidth < 768) {
-    setTimeout(() => quizNext(), 400);
-  }
+  // Auto-advance on ALL devices after selecting an option
+  setTimeout(() => quizNext(), 500);
 }
 
 function quizNext() {
@@ -214,7 +205,7 @@ function renderRecommendation(movie, alternatives = []) {
       <div class="p-6 md:p-8">
         <div class="flex flex-col md:flex-row gap-8">
           <div class="flex-shrink-0">
-            <img src="${poster}" alt="${movie.title}" 
+            <img src="${poster}" alt="${movie.title}"
               class="w-full md:w-52 rounded-xl shadow-2xl mx-auto md:mx-0"
               onerror="this.src='https://via.placeholder.com/200x300/141414/888?text=No+Poster'">
           </div>
@@ -265,7 +256,7 @@ function renderRecommendation(movie, alternatives = []) {
         ${alternatives.map(m => `
           <div class="bg-white/5 border border-white/8 rounded-xl overflow-hidden cursor-pointer hover:border-red-600/50 transition-all"
             onclick="openMovieDetail(${m.id})">
-            <img src="${m.poster || 'https://via.placeholder.com/180x270/141414/888?text='+encodeURIComponent(m.title)}" 
+            <img src="${m.poster || 'https://via.placeholder.com/180x270/141414/888?text='+encodeURIComponent(m.title)}"
               alt="${m.title}" class="w-full aspect-video object-cover object-top"
               onerror="this.src='https://via.placeholder.com/180x100/141414/888?text='+encodeURIComponent('${m.title}')">
             <div class="p-3">
