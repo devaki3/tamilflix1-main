@@ -6,10 +6,10 @@ const cors = require('cors');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 
-const { initializeDatabase } = require('../database/init');
-const { router: authRouter, setDb: setAuthDb } = require('./routes/auth');
-const { router: moviesRouter, setDb: setMoviesDb } = require('./routes/movies');
-const { router: roomsRouter, setDb: setRoomsDb } = require('./routes/rooms');
+const { initializeDatabase } = require('./database/init');
+const { router: authRouter, setDb: setAuthDb } = require('./auth');
+const { router: moviesRouter, setDb: setMoviesDb } = require('./movies');
+const { router: roomsRouter, setDb: setRoomsDb } = require('./rooms');
 
 const app = express();
 const server = http.createServer(app);
