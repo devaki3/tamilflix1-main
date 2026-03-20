@@ -101,7 +101,6 @@ function renderQuizStep() {
   document.getElementById('quiz-progress-fill').style.width = `${pct}%`;
   document.getElementById('quiz-step-label').textContent = `Question ${currentQuizStep + 1} of ${total}`;
   document.getElementById('quiz-pct-label').textContent = `${pct}% Complete`;
-
   document.getElementById('quiz-question').textContent = q.question;
 
   const optionsEl = document.getElementById('quiz-options');
@@ -116,50 +115,33 @@ function renderQuizStep() {
     </div>
   `).join('');
 
+  // Show/hide previous button
   const prevBtn = document.getElementById('quiz-prev-btn');
-  if (currentQuizStep > 0) {
-    prevBtn.classList.remove('hidden');
-  } else {
-    prevBtn.classList.add('hidden');
-  }
-
-  const nextBtn = document.getElementById('quiz-next-btn');
-  const hasAnswer = quizAnswers[q.key] !== undefined;
-  nextBtn.disabled = !hasAnswer;
-
-  if (currentQuizStep === total - 1) {
-    nextBtn.textContent = '🎬 Get My Recommendation!';
-  } else {
-    nextBtn.textContent = 'Next Question →';
+  if (prevBtn) {
+    if (currentQuizStep > 0) {
+      prevBtn.classList.remove('hidden');
+    } else {
+      prevBtn.classList.add('hidden');
+    }
   }
 }
 
 function selectQuizOption(key, value, el) {
   quizAnswers[key] = value;
 
+  // Highlight selected option
   document.querySelectorAll('.quiz-option').forEach(opt => opt.classList.remove('selected'));
   el.classList.add('selected');
 
-  const nextBtn = document.getElementById('quiz-next-btn');
-  nextBtn.disabled = false;
-
-  // Auto-advance on ALL devices after selecting an option
-  setTimeout(() => quizNext(), 500);
-}
-
-function quizNext() {
-  const q = QUIZ_QUESTIONS[currentQuizStep];
-  if (!quizAnswers[q.key]) {
-    showToast('⚠️', 'Please select an option');
-    return;
-  }
-
-  if (currentQuizStep < QUIZ_QUESTIONS.length - 1) {
-    currentQuizStep++;
-    renderQuizStep();
-  } else {
-    submitQuiz();
-  }
+  // Auto-advance after 500ms — no button needed
+  setTimeout(() => {
+    if (currentQuizStep < QUIZ_QUESTIONS.length - 1) {
+      currentQuizStep++;
+      renderQuizStep();
+    } else {
+      submitQuiz();
+    }
+  }, 500);
 }
 
 function quizPrev() {
