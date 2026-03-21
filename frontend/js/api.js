@@ -1,8 +1,9 @@
-// API Helper - Centralized fetch wrapper
-// Falls back to static data (STATIC_MOVIES) when backend is unavailable
+// API Helper
+const RENDER_URL = 'https://tamilflix1-main.onrender.com';
+
 const API = {
- BASE: 'https://tamilflix1-main.onrender.com/api',
-  staticMode: false, // auto-detected on first request failure
+  BASE: `${RENDER_URL}/api`,
+  staticMode: false,
 
   getToken() {
     return localStorage.getItem('tamilflix_token');
@@ -33,13 +34,13 @@ const API = {
     return res.json();
   },
 
-  // Auth — no static fallback for auth (requires server)
+  // Auth
   signup: (data) => API.post('/auth/signup', data),
   verifyOtp: (data) => API.post('/auth/verify-otp', data),
   login: (data) => API.post('/auth/login', data),
   resendOtp: (data) => API.post('/auth/resend-otp', data),
 
-  // Movies — with static fallback
+  // Movies
   async getMovies(params = '') {
     try {
       const result = await API.get(`/movies${params}`);
@@ -77,7 +78,6 @@ const API = {
         if (result && !result.error) return result;
       } catch {}
     }
-    // Client-side fallback
     return getRecommendation(answers);
   },
 
