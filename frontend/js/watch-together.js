@@ -1,10 +1,24 @@
-// Watch Together - Socket.io powered watch rooms
+// Watch Together - Fully Fixed Version
 let socket = null;
 let currentRoom = null;
 let currentUsername = '';
 let isHost = false;
+let ytPlayer = null;
+let ytReady = false;
 
 const BACKEND_URL = 'https://tamilflix1-main.onrender.com';
+
+// Load YouTube IFrame API
+function loadYouTubeAPI() {
+  if (window.YT) return;
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+}
+
+window.onYouTubeIframeAPIReady = function() {
+  ytReady = true;
+};
 
 function initSocket() {
   if (socket && socket.connected) return;
@@ -12,25 +26,54 @@ function initSocket() {
     socket = io(BACKEND_URL, {
       transports: ['polling', 'websocket'],
       reconnection: true,
-      reconnectionAttempts: 3,
-      timeout: 10000
+      reconnectionAttempts: 5,
+      timeout: 15000
     });
 
-    socket.on('connect', () => console.log('🔌 Connected to socket'));
-    socket.on('disconnect', () => console.log('❌ Socket disconnected'));
+    socket.on('connect', () => {
+      console.log('🔌 Socket connected:', socket.id);
+      // Rejoin room if we were in one
+      if (currentRoom) {
+        const user = getUser();
+        socket.emit('join-room', {
+          roomCode: currentRoom.code,
+          username: user?.name,
+          token: API.getToken()
+        });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ Socket disconnected');
+      showToast('⚠️', 'Connection lost. Reconnecting...');
+    });
+
+    socket.on('reconnect', () => {
+      showToast('✅', 'Reconnected!');
+    });
 
     socket.on('room-update', ({ members, memberCount }) => {
-      updateMembersList(members);
-      const countEl = document.getElementById('room-member-count');
-      if (countEl) countEl.textContent = `${memberCount}/8 members`;
+      updateMembersList(members, memberCount);
     });
 
     socket.on('chat-message', (msg) => {
       appendChatMessage(msg);
     });
 
-    socket.on('video-sync', ({ action }) => {
-      console.log('Video sync:', action);
+    socket.on('video-sync', ({ action, currentTime, isPlaying }) => {
+      if (!ytPlayer || isHost) return;
+      try {
+        if (action === 'play') {
+          ytPlayer.seekTo(currentTime || 0, true);
+          ytPlayer.playVideo();
+          showToast('▶', 'Host started the video');
+        } else if (action === 'pause') {
+          ytPlayer.pauseVideo();
+          showToast('⏸', 'Host paused the video');
+        } else if (action === 'seek') {
+          ytPlayer.seekTo(currentTime, true);
+        }
+      } catch(e) { console.log('YT player error:', e); }
     });
 
     socket.on('error', ({ message }) => {
@@ -38,12 +81,13 @@ function initSocket() {
     });
 
   } catch (e) {
-    console.log('Socket.io not available:', e.message);
+    console.log('Socket.io error:', e.message);
   }
 }
 
 async function openWatchTogether(movieId) {
   showPage('watch-together');
+  loadYouTubeAPI();
   const content = document.getElementById('watch-together-content');
 
   const user = getUser();
@@ -69,7 +113,6 @@ async function openWatchTogether(movieId) {
     </div>
 
     <div class="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-      <!-- Create Room -->
       <div class="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-red-600/30 transition-colors">
         <div class="text-3xl mb-3">🎬</div>
         <h3 class="text-lg font-bold mb-2">Create a Room</h3>
@@ -80,7 +123,6 @@ async function openWatchTogether(movieId) {
         </button>
       </div>
 
-      <!-- Join Room -->
       <div class="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-red-600/30 transition-colors">
         <div class="text-3xl mb-3">🚪</div>
         <h3 class="text-lg font-bold mb-2">Join a Room</h3>
@@ -104,7 +146,6 @@ async function openWatchTogether(movieId) {
   `;
 }
 
-// Client-side room store
 const LOCAL_ROOMS = {};
 
 function generateRoomCode() {
@@ -112,14 +153,17 @@ function generateRoomCode() {
 }
 
 async function createRoom(movieId) {
+  const user = getUser();
+  if (!user) { showToast('❌', 'Please login first'); return; }
+
   try {
     const data = await API.createRoom(movieId);
     if (data && !data.error) {
-      currentRoom = { code: data.roomCode, id: data.roomId, movieId };
-      isHost = true;
-      showToast('✅', `Room created! Code: ${data.roomCode}`);
       let movie = null;
       if (movieId) { try { movie = await API.getMovie(movieId); } catch(e) {} }
+      currentRoom = { code: data.roomCode, id: data.roomId, movieId };
+      isHost = true;
+      showToast('✅', `Room ${data.roomCode} created!`);
       renderWatchRoom(data.roomCode, movie, true);
       return;
     }
@@ -130,19 +174,23 @@ async function createRoom(movieId) {
   let movie = null;
   if (movieId) { try { movie = await API.getMovie(movieId); } catch(e) {} }
 
-  const user = getUser();
-  const hostName = user?.name || 'Host';
-  LOCAL_ROOMS[roomCode] = { movieId, movie, members: [hostName] };
+  LOCAL_ROOMS[roomCode] = {
+    movieId, movie,
+    members: [{ name: user.name, isHost: true }],
+    hostName: user.name
+  };
 
   currentRoom = { code: roomCode, movieId };
   isHost = true;
-  showToast('✅', `Room created! Code: ${roomCode}`);
+  showToast('✅', `Room ${roomCode} created!`);
   renderWatchRoom(roomCode, movie, true);
 }
 
 async function joinRoom() {
   const code = document.getElementById('room-code-input')?.value?.trim().toUpperCase();
   if (!code) { showToast('⚠️', 'Please enter a room code'); return; }
+
+  const user = getUser();
 
   try {
     const data = await API.joinRoom(code);
@@ -156,9 +204,8 @@ async function joinRoom() {
 
   const localRoom = LOCAL_ROOMS[code];
   if (localRoom) {
-    const user = getUser();
-    if (user && !localRoom.members.includes(user.name)) {
-      localRoom.members.push(user.name);
+    if (user && !localRoom.members.find(m => m.name === user.name)) {
+      localRoom.members.push({ name: user.name, isHost: false });
     }
     currentRoom = { code, movieId: localRoom.movieId };
     isHost = false;
@@ -166,60 +213,18 @@ async function joinRoom() {
     return;
   }
 
-  showToast('⚠️', `Room "${code}" not found. Creating guest session...`);
-  currentRoom = { code, movieId: null };
-  isHost = false;
-  renderWatchRoom(code, null, false);
+  showToast('❌', `Room "${code}" not found. Ask the host to share the correct code.`);
 }
 
-function buildWatchTrailer(trailerUrl, movieTitle) {
-  if (!trailerUrl) return `
-    <div class="aspect-video bg-black/60 border border-white/10 rounded-xl flex flex-col items-center justify-center mb-4">
-      <div class="text-5xl mb-3">🎬</div>
-      <p class="text-gray-400 text-sm">No trailer available</p>
-    </div>
-  `;
-
-  // Extract YouTube video ID
-  let videoId = '';
+function getVideoId(trailerUrl) {
+  if (!trailerUrl) return null;
   const embedMatch = trailerUrl.match(/embed\/([^?&]+)/);
   const shortMatch = trailerUrl.match(/youtu\.be\/([^?&]+)/);
   const longMatch = trailerUrl.match(/v=([^?&]+)/);
-  if (embedMatch) videoId = embedMatch[1];
-  else if (shortMatch) videoId = shortMatch[1];
-  else if (longMatch) videoId = longMatch[1];
-
-  if (!videoId) return `<p class="text-gray-400 text-sm mb-4">Trailer not available</p>`;
-
-  const thumbUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
-
-  return `
-    <div class="trailer-thumb-container relative w-full rounded-xl overflow-hidden mb-4 cursor-pointer group"
-      style="aspect-ratio:16/9; background:#000;"
-      onclick="loadWatchTrailer(this, '${embedUrl}')">
-      <img src="${thumbUrl}" alt="${movieTitle} trailer"
-        class="w-full h-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:brightness-75"
-        onerror="this.src='https://img.youtube.com/vi/${videoId}/hqdefault.jpg'">
-      <div class="absolute inset-0 flex items-center justify-center">
-        <div class="w-16 h-16 rounded-full bg-red-600/90 flex items-center justify-center shadow-2xl shadow-red-600/50 group-hover:scale-110 transition-transform">
-          <span style="font-size:24px; margin-left:4px;">▶</span>
-        </div>
-      </div>
-      <div class="absolute bottom-3 left-3 text-xs text-white/70 bg-black/50 px-2 py-1 rounded">
-        🎬 ${movieTitle}
-      </div>
-    </div>
-  `;
-}
-
-function loadWatchTrailer(container, embedUrl) {
-  container.innerHTML = `
-    <iframe src="${embedUrl}" class="w-full h-full" style="aspect-ratio:16/9;"
-      frameborder="0" allowfullscreen
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">
-    </iframe>
-  `;
+  if (embedMatch) return embedMatch[1];
+  if (shortMatch) return shortMatch[1];
+  if (longMatch) return longMatch[1];
+  return null;
 }
 
 function renderWatchRoom(roomCode, movie, hostMode = false) {
@@ -227,15 +232,15 @@ function renderWatchRoom(roomCode, movie, hostMode = false) {
   const user = getUser();
   const userName = user?.name || 'You';
 
-  // Get all current members
   const localRoom = LOCAL_ROOMS[roomCode];
-  const members = localRoom ? localRoom.members : [userName];
+  const members = localRoom ? localRoom.members.map(m => m.name) : [userName];
+  const videoId = movie ? getVideoId(movie.trailer) : null;
 
   content.innerHTML = `
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-4 flex items-center justify-between flex-wrap gap-3">
       <div>
         <h1 class="text-2xl font-extrabold">🎬 Watch Room</h1>
-        <div class="flex items-center gap-3 mt-1">
+        <div class="flex items-center gap-3 mt-1 flex-wrap">
           <div class="bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-sm font-mono font-bold text-red-400">
             ${roomCode}
           </div>
@@ -243,56 +248,78 @@ function renderWatchRoom(roomCode, movie, hostMode = false) {
             📋 Copy Code
           </button>
           <span id="room-member-count" class="text-xs text-gray-500">${members.length}/8 members</span>
-          ${hostMode ? '<span class="text-xs bg-red-600/20 text-red-400 border border-red-600/30 rounded px-2 py-0.5">👑 Host</span>' : ''}
+          ${hostMode ? '<span class="text-xs bg-red-600/20 text-red-400 border border-red-600/30 rounded px-2 py-0.5">👑 You are Host</span>' : '<span class="text-xs bg-white/10 text-gray-300 border border-white/20 rounded px-2 py-0.5">👤 Member</span>'}
         </div>
       </div>
-      <button onclick="leaveRoom('${roomCode}')" class="text-sm text-gray-500 hover:text-red-400 transition-colors">
-        Leave Room
+      <button onclick="leaveRoom('${roomCode}')" class="text-sm text-gray-500 hover:text-red-400 transition-colors border border-white/10 px-3 py-1.5 rounded-lg">
+        🚪 Leave Room
       </button>
     </div>
 
     <!-- Members List -->
     <div id="members-list" class="flex flex-wrap gap-2 mb-5">
-      ${members.map(name => `<div class="member-pill">${name}</div>`).join('')}
+      ${members.map(name => `
+        <div class="member-pill">
+          ${name === (localRoom?.hostName || userName) ? '👑 ' : ''}${name}
+        </div>
+      `).join('')}
     </div>
 
     <div class="grid lg:grid-cols-5 gap-5">
-      <!-- Video Player Area -->
+      <!-- Video Player -->
       <div class="lg:col-span-3">
         ${movie ? `
           <div class="mb-3">
-            <h3 class="font-bold text-lg">${movie.title} <span class="text-sm text-gray-400 font-normal">${movie.year}</span></h3>
+            <h3 class="font-bold text-lg">${movie.title}
+              <span class="text-sm text-gray-400 font-normal">${movie.year}</span>
+            </h3>
           </div>
-          ${buildWatchTrailer(movie.trailer, movie.title)}
+        ` : ''}
+
+        ${videoId ? `
+          <div id="yt-player-container" class="w-full rounded-xl overflow-hidden mb-4" style="aspect-ratio:16/9; background:#000;">
+            <div id="yt-player"></div>
+          </div>
         ` : `
           <div class="aspect-video bg-black/60 border border-white/10 rounded-xl flex flex-col items-center justify-center mb-4">
             <div class="text-5xl mb-3">🎬</div>
-            <p class="text-gray-400 text-sm">No movie selected</p>
-            <button onclick="showPage('home')" class="mt-4 text-red-500 text-sm hover:text-red-400 transition-colors">Browse movies →</button>
+            <p class="text-gray-400 text-sm">${movie ? 'Trailer not available' : 'No movie selected'}</p>
+            ${!movie ? `<button onclick="showPage('home')" class="mt-4 text-red-500 text-sm hover:text-red-400">Browse movies →</button>` : ''}
           </div>
         `}
 
-        ${hostMode ? `
-        <div class="flex gap-3 mt-2">
-          <button onclick="syncVideo('play')" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all">▶ Play All</button>
-          <button onclick="syncVideo('pause')" class="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all">⏸ Pause All</button>
-          <span class="text-xs text-gray-500 flex items-center">👑 Host controls</span>
+        <!-- Controls -->
+        <div class="flex gap-3 mt-2 flex-wrap">
+          ${hostMode ? `
+            <button onclick="hostPlay()" class="bg-green-600 hover:bg-green-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2">
+              ▶ Play for All
+            </button>
+            <button onclick="hostPause()" class="bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2">
+              ⏸ Pause for All
+            </button>
+            <span class="text-xs text-gray-500 flex items-center">👑 Host controls everyone</span>
+          ` : `
+            <div class="text-xs text-gray-500 flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5">
+              ⏳ Waiting for host to play...
+            </div>
+          `}
         </div>
-        ` : '<p class="text-xs text-gray-600 mt-2">Waiting for host to control playback...</p>'}
       </div>
 
       <!-- Chat -->
-      <div class="lg:col-span-2 flex flex-col bg-black/40 border border-white/8 rounded-xl overflow-hidden" style="height: 450px;">
-        <div class="px-4 py-3 border-b border-white/8 flex items-center justify-between">
+      <div class="lg:col-span-2 flex flex-col bg-black/40 border border-white/10 rounded-xl overflow-hidden" style="height: 480px;">
+        <div class="px-4 py-3 border-b border-white/10 flex items-center justify-between">
           <span class="text-sm font-bold">💬 Live Chat</span>
-          <span class="text-xs text-gray-500">Room: ${roomCode}</span>
+          <span class="text-xs text-gray-500">${roomCode}</span>
         </div>
 
         <div id="chat-messages" class="chat-messages flex-1 p-4 flex flex-col gap-2 overflow-y-auto">
-          <div class="chat-bubble system">${hostMode ? '🎉 Room created! Share the code with friends' : '✅ You joined the room'}</div>
+          <div class="chat-bubble system">
+            ${hostMode ? '🎉 Room created! Share code <strong>${roomCode}</strong> with friends' : `✅ You joined room ${roomCode}`}
+          </div>
         </div>
 
-        <div class="p-3 border-t border-white/8 flex gap-2">
+        <div class="p-3 border-t border-white/10 flex gap-2">
           <input type="text" id="chat-input" placeholder="Type a message..." maxlength="200"
             class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500 transition-colors"
             onkeypress="if(event.key==='Enter') sendChatMessage('${roomCode}')">
@@ -305,21 +332,121 @@ function renderWatchRoom(roomCode, movie, hostMode = false) {
     </div>
   `;
 
-  // Initialize socket and join room
+  // Initialize YouTube player
+  if (videoId) {
+    initYouTubePlayer(videoId, hostMode);
+  }
+
+  // Connect socket and join room
   initSocket();
-  if (socket && user) {
-    socket.emit('join-room', {
-      roomCode,
-      username: user.name,
-      token: API.getToken()
+  setTimeout(() => {
+    if (socket && user) {
+      socket.emit('join-room', {
+        roomCode,
+        username: user.name,
+        token: API.getToken()
+      });
+    }
+  }, 500);
+}
+
+function initYouTubePlayer(videoId, hostMode) {
+  ytPlayer = null;
+
+  function createPlayer() {
+    if (!window.YT || !window.YT.Player) {
+      setTimeout(createPlayer, 500);
+      return;
+    }
+
+    const container = document.getElementById('yt-player');
+    if (!container) return;
+
+    ytPlayer = new YT.Player('yt-player', {
+      width: '100%',
+      height: '100%',
+      videoId: videoId,
+      playerVars: {
+        autoplay: 0,
+        controls: hostMode ? 1 : 0, // only host has controls
+        rel: 0,
+        modestbranding: 1,
+        iv_load_policy: 3,
+        origin: window.location.origin
+      },
+      events: {
+        onReady: (e) => {
+          console.log('YouTube player ready');
+          // Style the container
+          const iframe = document.querySelector('#yt-player iframe');
+          if (iframe) {
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.borderRadius = '12px';
+          }
+        },
+        onStateChange: (e) => {
+          if (!isHost || !socket || !currentRoom) return;
+          if (e.data === YT.PlayerState.PLAYING) {
+            socket.emit('video-control', {
+              roomCode: currentRoom.code,
+              action: 'play',
+              currentTime: ytPlayer.getCurrentTime()
+            });
+          } else if (e.data === YT.PlayerState.PAUSED) {
+            socket.emit('video-control', {
+              roomCode: currentRoom.code,
+              action: 'pause',
+              currentTime: ytPlayer.getCurrentTime()
+            });
+          }
+        }
+      }
     });
+  }
+
+  createPlayer();
+}
+
+function hostPlay() {
+  if (ytPlayer) {
+    ytPlayer.playVideo();
+  }
+  if (socket && currentRoom) {
+    socket.emit('video-control', {
+      roomCode: currentRoom.code,
+      action: 'play',
+      currentTime: ytPlayer ? ytPlayer.getCurrentTime() : 0
+    });
+    showToast('▶', 'Playing for all members!');
   }
 }
 
-function updateMembersList(members) {
+function hostPause() {
+  if (ytPlayer) {
+    ytPlayer.pauseVideo();
+  }
+  if (socket && currentRoom) {
+    socket.emit('video-control', {
+      roomCode: currentRoom.code,
+      action: 'pause',
+      currentTime: ytPlayer ? ytPlayer.getCurrentTime() : 0
+    });
+    showToast('⏸', 'Paused for all members!');
+  }
+}
+
+function updateMembersList(members, memberCount) {
   const el = document.getElementById('members-list');
   if (!el || !members) return;
-  el.innerHTML = members.map(name => `<div class="member-pill">${name}</div>`).join('');
+  el.innerHTML = members.map((name, i) => `
+    <div class="member-pill">
+      ${i === 0 ? '👑 ' : ''}${name}
+    </div>
+  `).join('');
+
+  const countEl = document.getElementById('room-member-count');
+  if (countEl) countEl.textContent = `${memberCount || members.length}/8 members`;
 }
 
 function appendChatMessage(msg) {
@@ -339,6 +466,7 @@ function appendChatMessage(msg) {
     div.innerHTML = `
       ${!isOwn ? `<div class="text-xs text-red-400 font-bold mb-1">${msg.username}</div>` : ''}
       <div>${escapeHtml(msg.message)}</div>
+      <div class="text-xs text-gray-600 mt-1">${new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
     `;
   }
 
@@ -354,37 +482,39 @@ function sendChatMessage(roomCode) {
   if (socket && socket.connected) {
     socket.emit('send-message', { roomCode, message });
   } else {
+    // Show locally if socket not connected
     const user = getUser();
-    appendChatMessage({ type: 'user', username: user?.name || 'You', message });
+    appendChatMessage({
+      type: 'user',
+      username: user?.name || 'You',
+      message,
+      timestamp: Date.now()
+    });
   }
 
   input.value = '';
 }
 
-function syncVideo(action) {
-  if (socket && currentRoom) {
-    socket.emit('video-control', { roomCode: currentRoom.code, action, currentTime: 0 });
-    showToast('📡', `Syncing ${action} for all members`);
-  } else {
-    showToast('📡', `${action === 'play' ? '▶ Playing' : '⏸ Paused'}`);
-  }
-}
-
 function copyRoomCode(code) {
   navigator.clipboard.writeText(code).then(() => {
-    showToast('📋', `Room code ${code} copied!`);
+    showToast('📋', `Room code ${code} copied! Share with friends!`);
   }).catch(() => {
     showToast('📋', `Room code: ${code}`);
   });
 }
 
 function leaveRoom(roomCode) {
+  if (ytPlayer) {
+    try { ytPlayer.destroy(); } catch(e) {}
+    ytPlayer = null;
+  }
   if (socket) {
     socket.emit('leave-room', { roomCode });
     socket.disconnect();
     socket = null;
   }
   currentRoom = null;
+  isHost = false;
   showToast('👋', 'Left the room');
   showPage('home');
 }
@@ -393,4 +523,10 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.appendChild(document.createTextNode(text));
   return div.innerHTML;
+}
+
+// Also fix syncVideo for backward compatibility
+function syncVideo(action) {
+  if (action === 'play') hostPlay();
+  else if (action === 'pause') hostPause();
 }
