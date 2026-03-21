@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 let db;
@@ -16,17 +15,50 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Email transporter using Brevo SMTP
-function getTransporter() {
-  return nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 587,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
+// Send email using Brevo HTTP API (works on Render free tier!)
+async function sendEmail(to, name, otp, isResend = false) {
+  const subject = isResend ? 'PadamPaapoma - New OTP Code' : 'Your PadamPaapoma OTP Verification Code';
+  const htmlContent = isResend ? `
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #0a0a0a; color: #fff; padding: 40px; border-radius: 12px;">
+      <h1 style="color: #a855f7; text-align: center;">🎬 PadamPaapoma</h1>
+      <p>Your new OTP: <strong style="font-size:28px;color:#a855f7;">${otp}</strong></p>
+      <p style="color: #888;">Expires in 10 minutes</p>
+    </div>
+  ` : `
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #0a0a0a; color: #fff; padding: 40px; border-radius: 12px;">
+      <h1 style="color: #a855f7; text-align: center;">🎬 PadamPaapoma</h1>
+      <h2 style="text-align: center;">Email Verification</h2>
+      <p>Hello ${name},</p>
+      <p>Your OTP verification code is:</p>
+      <div style="background: #1a1a1a; border: 2px solid #a855f7; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+        <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #a855f7;">${otp}</span>
+      </div>
+      <p style="color: #888;">This code expires in <strong style="color: #fff;">10 minutes</strong>.</p>
+      <p style="color: #888;">If you didn't request this, please ignore this email.</p>
+    </div>
+  `;
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': process.env.BREVO_API_KEY,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      sender: { name: 'PadamPaapoma', email: process.env.EMAIL_USER },
+      to: [{ email: to, name: name }],
+      subject: subject,
+      htmlContent: htmlContent
+    })
   });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Brevo API error: ${error}`);
+  }
+
+  return response.json();
 }
 
 // Validate Gmail format
@@ -52,16 +84,15 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    // Check if user exists
     const existingUser = db.prepare('SELECT id, is_verified FROM users WHERE email = ?').get(email);
-    
+
     if (existingUser && existingUser.is_verified) {
       return res.status(400).json({ error: 'Email already registered. Please login.' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const otp = generateOTP();
-    const otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const otpExpires = Date.now() + 10 * 60 * 1000;
 
     if (existingUser && !existingUser.is_verified) {
       db.prepare(`UPDATE users SET name=?, password=?, otp=?, otp_expires=? WHERE email=?`)
@@ -71,33 +102,15 @@ router.post('/signup', async (req, res) => {
         .run(name, email, hashedPassword, otp, otpExpires);
     }
 
-    // Send OTP email via Brevo
+    // Send OTP via Brevo API
     try {
-      const transporter = getTransporter();
-      await transporter.sendMail({
-        from: `"PadamPaapoma 🎬" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: 'Your PadamPaapoma OTP Verification Code',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #0a0a0a; color: #fff; padding: 40px; border-radius: 12px;">
-            <h1 style="color: #a855f7; text-align: center;">🎬 PadamPaapoma</h1>
-            <h2 style="text-align: center;">Email Verification</h2>
-            <p>Hello ${name},</p>
-            <p>Your OTP verification code is:</p>
-            <div style="background: #1a1a1a; border: 2px solid #a855f7; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
-              <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #a855f7;">${otp}</span>
-            </div>
-            <p style="color: #888;">This code expires in <strong style="color: #fff;">10 minutes</strong>.</p>
-            <p style="color: #888;">If you didn't request this, please ignore this email.</p>
-          </div>
-        `
-      });
+      await sendEmail(email, name, otp, false);
       console.log(`📧 OTP sent to ${email}`);
     } catch (emailErr) {
       console.error('Email error:', emailErr.message);
     }
 
-    res.json({ 
+    res.json({
       message: 'OTP sent to your email. Please verify to complete signup.',
       email
     });
@@ -135,7 +148,6 @@ router.post('/verify-otp', (req, res) => {
       return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
     }
 
-    // Verify the user
     db.prepare('UPDATE users SET is_verified=1, otp=NULL, otp_expires=NULL WHERE email=?').run(email);
 
     const token = jwt.sign(
@@ -214,17 +226,7 @@ router.post('/resend-otp', async (req, res) => {
     db.prepare('UPDATE users SET otp=?, otp_expires=? WHERE email=?').run(otp, otpExpires, email);
 
     try {
-      const transporter = getTransporter();
-      await transporter.sendMail({
-        from: `"PadamPaapoma 🎬" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: 'PadamPaapoma - New OTP Code',
-        html: `<div style="background:#0a0a0a;color:#fff;padding:40px;border-radius:12px;text-align:center;">
-          <h1 style="color:#a855f7;">🎬 PadamPaapoma</h1>
-          <p>Your new OTP: <strong style="font-size:28px;color:#a855f7;">${otp}</strong></p>
-          <p style="color:#888;">Expires in 10 minutes</p>
-        </div>`
-      });
+      await sendEmail(email, user.name, otp, true);
       console.log(`📧 Resent OTP to ${email}`);
     } catch (e) {
       console.error('Resend email error:', e.message);
