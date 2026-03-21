@@ -16,7 +16,7 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Email transporter
+// Email transporter using Brevo SMTP
 function getTransporter() {
   return nodemailer.createTransport({
     host: 'smtp-relay.brevo.com',
@@ -64,48 +64,42 @@ router.post('/signup', async (req, res) => {
     const otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     if (existingUser && !existingUser.is_verified) {
-      // Update existing unverified user
       db.prepare(`UPDATE users SET name=?, password=?, otp=?, otp_expires=? WHERE email=?`)
         .run(name, hashedPassword, otp, otpExpires, email);
     } else {
-      // Create new user
       db.prepare(`INSERT INTO users (name, email, password, otp, otp_expires) VALUES (?, ?, ?, ?, ?)`)
         .run(name, email, hashedPassword, otp, otpExpires);
     }
 
-    // Send OTP email
+    // Send OTP email via Brevo
     try {
       const transporter = getTransporter();
       await transporter.sendMail({
-        from: `"TamilFlix 🎬" <${process.env.EMAIL_USER}>`,
+        from: `"PadamPaapoma 🎬" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: 'Your TamilFlix OTP Verification Code',
+        subject: 'Your PadamPaapoma OTP Verification Code',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #0a0a0a; color: #fff; padding: 40px; border-radius: 12px;">
-            <h1 style="color: #e50914; text-align: center;">🎬 TamilFlix</h1>
+            <h1 style="color: #a855f7; text-align: center;">🎬 PadamPaapoma</h1>
             <h2 style="text-align: center;">Email Verification</h2>
             <p>Hello ${name},</p>
             <p>Your OTP verification code is:</p>
-            <div style="background: #1a1a1a; border: 2px solid #e50914; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
-              <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #e50914;">${otp}</span>
+            <div style="background: #1a1a1a; border: 2px solid #a855f7; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+              <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #a855f7;">${otp}</span>
             </div>
             <p style="color: #888;">This code expires in <strong style="color: #fff;">10 minutes</strong>.</p>
             <p style="color: #888;">If you didn't request this, please ignore this email.</p>
           </div>
         `
       });
-      console.log(`📧 OTP sent to ${email}: ${otp}`);
+      console.log(`📧 OTP sent to ${email}`);
     } catch (emailErr) {
       console.error('Email error:', emailErr.message);
-      // For demo purposes, log OTP to console
-      console.log(`🔑 Demo OTP for ${email}: ${otp}`);
     }
 
     res.json({ 
       message: 'OTP sent to your email. Please verify to complete signup.',
-      email,
-      // In development, return OTP for testing
-      ...(process.env.NODE_ENV !== 'production' && { devOtp: otp })
+      email
     });
 
   } catch (error) {
@@ -151,7 +145,7 @@ router.post('/verify-otp', (req, res) => {
     );
 
     res.json({
-      message: 'Email verified successfully! Welcome to TamilFlix!',
+      message: 'Email verified successfully! Welcome to PadamPaapoma!',
       token,
       user: { id: user.id, name: user.name, email: user.email }
     });
@@ -222,20 +216,21 @@ router.post('/resend-otp', async (req, res) => {
     try {
       const transporter = getTransporter();
       await transporter.sendMail({
-        from: `"TamilFlix 🎬" <${process.env.EMAIL_USER}>`,
+        from: `"PadamPaapoma 🎬" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: 'TamilFlix - New OTP Code',
+        subject: 'PadamPaapoma - New OTP Code',
         html: `<div style="background:#0a0a0a;color:#fff;padding:40px;border-radius:12px;text-align:center;">
-          <h1 style="color:#e50914;">🎬 TamilFlix</h1>
-          <p>Your new OTP: <strong style="font-size:28px;color:#e50914;">${otp}</strong></p>
+          <h1 style="color:#a855f7;">🎬 PadamPaapoma</h1>
+          <p>Your new OTP: <strong style="font-size:28px;color:#a855f7;">${otp}</strong></p>
           <p style="color:#888;">Expires in 10 minutes</p>
         </div>`
       });
+      console.log(`📧 Resent OTP to ${email}`);
     } catch (e) {
-      console.log(`🔑 Resent OTP for ${email}: ${otp}`);
+      console.error('Resend email error:', e.message);
     }
 
-    res.json({ message: 'New OTP sent!', ...(process.env.NODE_ENV !== 'production' && { devOtp: otp }) });
+    res.json({ message: 'New OTP sent!' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
