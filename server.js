@@ -9,212 +9,212 @@ const jwt = require('jsonwebtoken');
 const { initializeDatabase } = require('./database/init');
 const { router: authRouter, setDb: setAuthDb } = require('./auth');
 const { router: roomsRouter, setDb: setRoomsDb } = require('./rooms');
+
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  },
   transports: ['polling', 'websocket']
 });
 
+// Middleware
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'frontend')));
 
+// Initialize database
 const db = initializeDatabase();
 setAuthDb(db);
-setMoviesDb(db);
 setRoomsDb(db);
 
+// Movies router inline
+const moviesRouter = express.Router();
+moviesRouter.get('/', (req, res) => {
+  try {
+    const { search, genre } = req.query;
+    let movies;
+    if (search) {
+      movies = db.prepare("SELECT * FROM movies WHERE title LIKE ?").all(`%${search}%`);
+    } else if (genre) {
+      movies = db.prepare("SELECT * FROM movies").all().filter(m => {
+        try { return JSON.parse(m.genre || '[]').includes(genre); } catch { return false; }
+      });
+    } else {
+      movies = db.prepare("SELECT * FROM movies").all();
+    }
+    res.json(movies.map(m => ({
+      ...m,
+      genre: JSON.parse(m.genre || '[]'),
+      cast: JSON.parse(m.cast || '[]'),
+      tags: JSON.parse(m.tags || '[]'),
+      mood: JSON.parse(m.mood || '[]')
+    })));
+  } catch (e) { res.status(500).json({ error: 'Failed to fetch movies' }); }
+});
+moviesRouter.get('/:id', (req, res) => {
+  try {
+    const movie = db.prepare("SELECT * FROM movies WHERE id = ?").get(req.params.id);
+    if (!movie) return res.status(404).json({ error: 'Movie not found' });
+    res.json({ ...movie, genre: JSON.parse(movie.genre||'[]'), cast: JSON.parse(movie.cast||'[]'), tags: JSON.parse(movie.tags||'[]'), mood: JSON.parse(movie.mood||'[]') });
+  } catch (e) { res.status(500).json({ error: 'Failed to fetch movie' }); }
+});
+moviesRouter.post('/recommend', (req, res) => {
+  try {
+    const movies = db.prepare("SELECT * FROM movies").all();
+    const r = movies[Math.floor(Math.random() * movies.length)];
+    res.json({ ...r, genre: JSON.parse(r.genre||'[]'), cast: JSON.parse(r.cast||'[]'), tags: JSON.parse(r.tags||'[]'), mood: JSON.parse(r.mood||'[]') });
+  } catch (e) { res.status(500).json({ error: 'Recommendation failed' }); }
+});
+
+// API Routes
 app.use('/api/auth', authRouter);
 app.use('/api/movies', moviesRouter);
 app.use('/api/rooms', roomsRouter);
 
+// Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: '🎬 TamilFlix API is running!', rooms: ROOMS.size });
+  res.json({ status: 'ok', message: '🎬 TamilFlix API is running!' });
 });
 
-app.get('/api/users', (req, res) => {
-  const users = db.prepare('SELECT id, name, email, is_verified, created_at FROM users').all();
-  res.json(users);
-});
-
+// Serve frontend for all non-API routes
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(__dirname, 'frontend/index.html'));
   }
 });
 
-// In-memory rooms store
-// roomCode -> { members: [{socketId, username}], movie, videoState, hostSocketId }
-const ROOMS = new Map();
-
-function generateCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
+// Socket.io - Watch Together Room Management
+const rooms = new Map(); // roomCode -> { members, videoState, hostSocketId }
 
 io.on('connection', (socket) => {
-  console.log(`🔌 Connected: ${socket.id}`);
+  console.log(`🔌 Socket connected: ${socket.id}`);
 
-  // CREATE ROOM
-  socket.on('create-room', ({ username, movie }) => {
-    const roomCode = generateCode();
+  socket.on('join-room', ({ roomCode, username, token }) => {
+    try {
+      let userId = null;
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'tamilflix_secret');
+          userId = decoded.userId;
+        } catch (e) {}
+      }
 
-    ROOMS.set(roomCode, {
-      members: [{ socketId: socket.id, username }],
-      movie: movie || null,
-      videoState: { isPlaying: false, currentTime: 0 },
-      hostSocketId: socket.id,
-      hostName: username
-    });
+      socket.join(roomCode);
+      socket.roomCode = roomCode;
+      socket.username = username || 'Guest';
 
-    socket.join(roomCode);
-    socket.roomCode = roomCode;
-    socket.username = username;
+      if (!rooms.has(roomCode)) {
+        rooms.set(roomCode, {
+          members: [],
+          videoState: { isPlaying: false, currentTime: 0, lastUpdate: Date.now() },
+          hostSocketId: socket.id
+        });
+      }
 
-    socket.emit('room-created', {
-      roomCode,
-      members: [username],
-      memberCount: 1,
-      movie: movie || null,
-      isHost: true
-    });
+      const room = rooms.get(roomCode);
 
-    console.log(`🏠 Room ${roomCode} created by ${username}`);
-  });
+      if (room.members.length >= 8) {
+        socket.emit('error', { message: 'Room is full (max 8 members)' });
+        return;
+      }
 
-  // JOIN ROOM
-  socket.on('join-room', ({ roomCode, username }) => {
-    const room = ROOMS.get(roomCode);
+      room.members = room.members.filter(m => m.socketId !== socket.id);
+      room.members.push({ socketId: socket.id, username: socket.username, userId });
 
-    if (!room) {
-      socket.emit('room-error', {
-        message: `Room "${roomCode}" not found! Make sure the host has created the room and shared the correct code.`
+      // Tell joining socket whether they are host
+      socket.emit('host-status', { isHost: room.hostSocketId === socket.id });
+
+      // Broadcast updated member list to everyone
+      io.to(roomCode).emit('room-update', {
+        members: room.members.map(m => m.username),
+        memberCount: room.members.length,
+        hostSocketId: room.hostSocketId
       });
-      return;
+
+      // Send current video state to new joiner
+      socket.emit('video-sync', {
+        action: room.videoState.isPlaying ? 'play' : 'pause',
+        currentTime: room.videoState.currentTime,
+        isPlaying: room.videoState.isPlaying
+      });
+
+      // System notification
+      io.to(roomCode).emit('chat-message', {
+        type: 'system',
+        message: `${socket.username} joined the room 🎉`,
+        timestamp: Date.now()
+      });
+
+      console.log(`👥 ${socket.username} joined room ${roomCode} (${room.members.length}/8)`);
+    } catch (err) {
+      console.error('Join room error:', err.message);
     }
-
-    if (room.members.length >= 8) {
-      socket.emit('room-error', { message: 'Room is full! (Max 8 members)' });
-      return;
-    }
-
-    // Remove duplicate if same user rejoins
-    room.members = room.members.filter(m => m.username !== username);
-    room.members.push({ socketId: socket.id, username });
-
-    socket.join(roomCode);
-    socket.roomCode = roomCode;
-    socket.username = username;
-
-    const memberNames = room.members.map(m => m.username);
-    const isHostUser = room.hostSocketId === socket.id || room.hostName === username;
-
-    // Tell joiner they joined
-    socket.emit('room-joined', {
-      roomCode,
-      members: memberNames,
-      memberCount: room.members.length,
-      movie: room.movie,
-      isHost: isHostUser,
-      videoState: room.videoState,
-      hostName: room.hostName
-    });
-
-    // Update ALL members
-    io.to(roomCode).emit('room-update', {
-      members: memberNames,
-      memberCount: room.members.length,
-      hostName: room.hostName
-    });
-
-    // System message to all
-    io.to(roomCode).emit('chat-message', {
-      type: 'system',
-      message: `${username} joined the room 🎉`,
-      timestamp: Date.now()
-    });
-
-    console.log(`👥 ${username} joined room ${roomCode} (${room.members.length} members)`);
   });
 
-  // VIDEO CONTROL (host broadcasts to members)
   socket.on('video-control', ({ roomCode, action, currentTime }) => {
-    const room = ROOMS.get(roomCode);
-    if (!room) return;
+    const room = rooms.get(roomCode);
+    if (!room || room.hostSocketId !== socket.id) return;
 
-    if (action === 'play') room.videoState = { isPlaying: true, currentTime: currentTime || 0 };
-    if (action === 'pause') room.videoState = { isPlaying: false, currentTime: currentTime || 0 };
-    if (action === 'seek') room.videoState.currentTime = currentTime || 0;
+    if (action === 'play')  room.videoState = { isPlaying: true,  currentTime, lastUpdate: Date.now() };
+    if (action === 'pause') room.videoState = { isPlaying: false, currentTime, lastUpdate: Date.now() };
+    if (action === 'seek')  room.videoState = { ...room.videoState, currentTime, lastUpdate: Date.now() };
 
-    // Send to everyone EXCEPT host
-    socket.to(roomCode).emit('video-sync', {
-      action,
-      currentTime: currentTime || 0,
-      isPlaying: room.videoState.isPlaying
-    });
-
-    console.log(`📹 ${socket.username} ${action} in room ${roomCode}`);
+    io.to(roomCode).emit('video-sync', { action, currentTime, isPlaying: room.videoState.isPlaying });
   });
 
-  // CHAT MESSAGE
   socket.on('send-message', ({ roomCode, message }) => {
-    if (!message?.trim()) return;
+    if (!message || !message.trim()) return;
 
     const msgData = {
       type: 'user',
-      username: socket.username || 'Guest',
+      username: socket.username,
       message: message.trim().substring(0, 500),
       timestamp: Date.now()
     };
 
-    // Send to ALL in room including sender
+    try {
+      const room = db.prepare('SELECT id FROM rooms WHERE room_code = ?').get(roomCode);
+      if (room) {
+        db.prepare('INSERT INTO messages (room_id, username, message) VALUES (?, ?, ?)')
+          .run(room.id, socket.username, message.trim());
+      }
+    } catch (e) {}
+
     io.to(roomCode).emit('chat-message', msgData);
-    console.log(`💬 ${socket.username}: ${message.substring(0, 30)} in ${roomCode}`);
   });
 
-  // LEAVE ROOM
   socket.on('leave-room', ({ roomCode }) => {
     handleLeave(socket, roomCode);
+    socket.leave(roomCode);
   });
 
-  // DISCONNECT
   socket.on('disconnect', () => {
-    if (socket.roomCode) handleLeave(socket, socket.roomCode);
-    console.log(`❌ Disconnected: ${socket.id}`);
+    const { roomCode } = socket;
+    if (roomCode) handleLeave(socket, roomCode);
+    console.log(`❌ Socket disconnected: ${socket.id}`);
   });
 });
 
 function handleLeave(socket, roomCode) {
-  const room = ROOMS.get(roomCode);
-  if (!room) return;
-
+  if (!roomCode || !rooms.has(roomCode)) return;
+  const room = rooms.get(roomCode);
   room.members = room.members.filter(m => m.socketId !== socket.id);
-  console.log(`👋 ${socket.username} left room ${roomCode}`);
 
-  if (room.members.length === 0) {
-    ROOMS.delete(roomCode);
-    console.log(`🗑️ Room ${roomCode} deleted`);
-    return;
-  }
+  if (room.members.length === 0) { rooms.delete(roomCode); return; }
 
-  // Transfer host if needed
   if (room.hostSocketId === socket.id) {
     room.hostSocketId = room.members[0].socketId;
-    room.hostName = room.members[0].username;
-    io.to(room.members[0].socketId).emit('host-transferred', {
-      message: 'You are now the host! 👑'
-    });
+    io.to(room.members[0].socketId).emit('host-status', { isHost: true });
   }
 
-  const memberNames = room.members.map(m => m.username);
-
   io.to(roomCode).emit('room-update', {
-    members: memberNames,
+    members: room.members.map(m => m.username),
     memberCount: room.members.length,
-    hostName: room.hostName
+    hostSocketId: room.hostSocketId
   });
 
   io.to(roomCode).emit('chat-message', {
@@ -226,6 +226,8 @@ function handleLeave(socket, roomCode) {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`\n🎬 Server running on port ${PORT}`);
-  console.log(`📡 Socket.io ready`);
+  console.log(`\n🎬 TamilFlix Server running on http://localhost:${PORT}`);
+  console.log(`📡 Socket.io ready for Watch Together`);
+  console.log(`🗄️  Database initialized`);
+  console.log(`\nOpen your browser and go to: http://localhost:${PORT}\n`);
 });
