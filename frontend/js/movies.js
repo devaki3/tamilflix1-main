@@ -375,8 +375,9 @@ function filterByGenre(genre) {
   }, 200);
 
   rows.insertAdjacentHTML('afterbegin', `
-    <button onclick="renderHomePage()" class="mb-6 text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-2">
-      ← All Categories
-    </button>
+   <button onclick="goBack()" class="bg-white/10 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-white/20 transition-all text-sm">
+  ← Back
+</button>
+     
   `);
 }
