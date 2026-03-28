@@ -474,6 +474,31 @@ body::after {
 /* Mobile search */
 @media (max-width: 768px) {
   .movie-row-title { font-size: 15px; }
+
+  /* Show search bar on mobile */
+  nav .relative.hidden {
+    display: block !important;
+  }
+  #search-input {
+    width: 130px !important;
+    font-size: 12px;
+  }
+  #search-input:focus {
+    width: 160px !important;
+  }
+}
+
+  /* Show search bar on mobile */
+  nav .relative.hidden {
+    display: block !important;
+  }
+  #search-input {
+    width: 130px !important;
+    font-size: 12px;
+  }
+  #search-input:focus {
+    width: 160px !important;
+  }
 }
 
 /* Purple glow on inputs focus */
