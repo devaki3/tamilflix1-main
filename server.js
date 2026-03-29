@@ -25,6 +25,7 @@ const db = initializeDatabase();
 setAuthDb(db);
 setRoomsDb(db);
 
+// ── Inline movies router ──────────────────────────────────────
 const moviesRouter = express.Router();
 
 moviesRouter.get('/', (req, res) => {
@@ -80,11 +81,23 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'frontend/index.html'));
 });
 
+// ══════════════════════════════════════════════════════════════
+//  SOCKET.IO — Watch Together
+//
+//  Room shape:
+//  {
+//    hostSocketId : string,       // socket.id of whoever created the room
+//    hostUsername : string,       // username of host (for reconnect matching)
+//    members      : [{ socketId, username, userId }],
+//    videoState   : { isPlaying, currentTime, lastUpdate }
+//  }
+// ══════════════════════════════════════════════════════════════
 const rooms = new Map();
 
 io.on('connection', (socket) => {
   console.log(`🔌 Connected: ${socket.id}`);
 
+  // ── join-room ───────────────────────────────────────────────
   socket.on('join-room', ({ roomCode, username, token }) => {
     try {
       let userId = null;
@@ -97,9 +110,10 @@ io.on('connection', (socket) => {
 
       const uname = username || 'Guest';
       socket.join(roomCode);
-      socket.roomCode = roomCode;
-      socket.username = uname;
+      socket.roomCode  = roomCode;
+      socket.username  = uname;
 
+      // ── Create room if first joiner ─────────────────────────
       if (!rooms.has(roomCode)) {
         rooms.set(roomCode, {
           hostSocketId : socket.id,
@@ -111,16 +125,21 @@ io.on('connection', (socket) => {
 
       const room = rooms.get(roomCode);
 
+      // ── Room full? ──────────────────────────────────────────
       if (room.members.length >= 8) {
         socket.emit('error', { message: 'Room is full (max 8 members)' });
         return;
       }
 
+      // ── Reconnect: if this username was the host, restore ───
+      // This fixes the bug where host's socket.id changes on reconnect
+      // and they can no longer control video.
       if (room.hostUsername === uname && room.hostSocketId !== socket.id) {
         console.log(`♻️  Host ${uname} reconnected, updating hostSocketId`);
         room.hostSocketId = socket.id;
       }
 
+      // ── Remove old entry for same socket or same username ───
       room.members = room.members.filter(
         m => m.socketId !== socket.id && m.username !== uname
       );
@@ -128,8 +147,10 @@ io.on('connection', (socket) => {
 
       const amHost = (room.hostSocketId === socket.id);
 
+      // Tell this socket its role
       socket.emit('host-status', { isHost: amHost });
 
+      // Tell everyone the updated member list
       io.to(roomCode).emit('room-update', {
         members      : room.members.map(m => m.username),
         memberCount  : room.members.length,
@@ -137,12 +158,15 @@ io.on('connection', (socket) => {
         hostUsername : room.hostUsername
       });
 
+      // Send current video state to the new joiner so they sync immediately
+      // We send this ONLY to the new joiner, not everyone
       socket.emit('video-sync', {
         action      : room.videoState.isPlaying ? 'play' : 'pause',
         currentTime : room.videoState.currentTime,
         isPlaying   : room.videoState.isPlaying
       });
 
+      // Join notification to everyone in room
       io.to(roomCode).emit('chat-message', {
         type      : 'system',
         message   : `${uname} joined the room 🎉`,
@@ -155,6 +179,8 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── video-control (host only) ───────────────────────────────
+  // FIX: check BOTH socket.id AND username match to allow reconnected hosts
   socket.on('video-control', ({ roomCode, action, currentTime }) => {
     const room = rooms.get(roomCode);
     if (!room) return;
@@ -167,8 +193,10 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Keep hostSocketId in sync (reconnect scenario)
     if (room.hostSocketId !== socket.id) room.hostSocketId = socket.id;
 
+    // Update stored video state
     if (action === 'play') {
       room.videoState = { isPlaying: true,  currentTime, lastUpdate: Date.now() };
     } else if (action === 'pause') {
@@ -177,6 +205,7 @@ io.on('connection', (socket) => {
       room.videoState = { ...room.videoState, currentTime, lastUpdate: Date.now() };
     }
 
+    // FIX: broadcast ONLY to members, NOT back to host (prevents feedback loop)
     socket.to(roomCode).emit('video-sync', {
       action,
       currentTime,
@@ -186,6 +215,7 @@ io.on('connection', (socket) => {
     console.log(`📺 ${socket.username} ${action} at ${Math.floor(currentTime)}s → room ${roomCode}`);
   });
 
+  // ── send-message (chat — DO NOT TOUCH) ─────────────────────
   socket.on('send-message', ({ roomCode, message }) => {
     if (!message || !message.trim()) return;
 
@@ -196,6 +226,7 @@ io.on('connection', (socket) => {
       timestamp : Date.now()
     };
 
+    // Persist to DB if room exists
     try {
       const dbRoom = db.prepare('SELECT id FROM rooms WHERE room_code = ?').get(roomCode);
       if (dbRoom) {
@@ -204,14 +235,17 @@ io.on('connection', (socket) => {
       }
     } catch (_) {}
 
+    // Broadcast to ALL in room (this is the working chat — unchanged)
     io.to(roomCode).emit('chat-message', msgData);
   });
 
+  // ── leave-room (member voluntarily leaves) ──────────────────
   socket.on('leave-room', ({ roomCode }) => {
     _handleMemberLeave(socket, roomCode);
     socket.leave(roomCode);
   });
 
+  // ── close-room (host intentionally closes) ──────────────────
   socket.on('close-room', ({ roomCode }) => {
     const room = rooms.get(roomCode);
     if (!room) return;
@@ -223,6 +257,7 @@ io.on('connection', (socket) => {
     _closeRoom(roomCode, `${socket.username} (host) closed the room`);
   });
 
+  // ── disconnect ───────────────────────────────────────────────
   socket.on('disconnect', () => {
     const { roomCode, username } = socket;
     if (!roomCode) { console.log(`❌ Disconnected: ${socket.id}`); return; }
@@ -232,6 +267,7 @@ io.on('connection', (socket) => {
       const isRoomHost = (room.hostSocketId === socket.id) ||
                          (room.hostUsername  === username);
       if (isRoomHost) {
+        // Host disconnected → close room for everyone
         _closeRoom(roomCode, `Host disconnected — room closed`);
       } else {
         _handleMemberLeave(socket, roomCode);
@@ -241,12 +277,14 @@ io.on('connection', (socket) => {
   });
 });
 
+// ── Close room: notify all, delete from map ───────────────────
 function _closeRoom(roomCode, reason) {
   console.log(`🔴 Room ${roomCode} closed: ${reason}`);
   io.to(roomCode).emit('room-closed', { reason });
   rooms.delete(roomCode);
 }
 
+// ── Member leaves: update list, notify room ───────────────────
 function _handleMemberLeave(socket, roomCode) {
   if (!roomCode || !rooms.has(roomCode)) return;
   const room = rooms.get(roomCode);
