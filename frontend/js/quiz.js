@@ -166,13 +166,45 @@ async function submitQuiz() {
 
   try {
     const data = await API.getRecommendation(quizAnswers);
+
+    if (!data) {
+      content.innerHTML = `<p class="text-center text-red-400 py-16">No recommendation found. Please try again.</p>`;
+      return;
+    }
     if (data.error) {
       content.innerHTML = `<p class="text-center text-red-400 py-16">${data.error}</p>`;
       return;
     }
-    renderRecommendation(data.recommended, data.alternatives);
+
+    // API.getRecommendation can return two shapes:
+    // 1. Client-side fallback: { recommended: movie, alternatives: [...] }
+    // 2. Server /api/movies/recommend: a single movie object directly
+    // Handle both:
+    if (data.recommended) {
+      // Shape 1 — client fallback
+      renderRecommendation(data.recommended, data.alternatives || []);
+    } else if (data.id) {
+      // Shape 2 — server returned a raw movie object
+      // Run client-side scoring to get alternatives
+      const fallback = getRecommendation(quizAnswers);
+      const alternatives = fallback.alternatives.filter(m => m.id !== data.id);
+      renderRecommendation(data, alternatives);
+    } else {
+      content.innerHTML = `<p class="text-center text-red-400 py-16">Could not find a matching movie. Try again!</p>`;
+    }
   } catch (err) {
-    content.innerHTML = `<p class="text-center text-red-400 py-16">Failed to get recommendation. Please try again.</p>`;
+    console.error('Quiz recommendation error:', err);
+    // Last resort: use client-side only
+    try {
+      const fallback = getRecommendation(quizAnswers);
+      if (fallback && fallback.recommended) {
+        renderRecommendation(fallback.recommended, fallback.alternatives || []);
+      } else {
+        content.innerHTML = `<p class="text-center text-red-400 py-16">Failed to get recommendation. Please try again.</p>`;
+      }
+    } catch (e) {
+      content.innerHTML = `<p class="text-center text-red-400 py-16">Failed to get recommendation. Please try again.</p>`;
+    }
   }
 }
 
